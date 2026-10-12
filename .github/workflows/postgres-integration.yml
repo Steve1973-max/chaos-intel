@@ -1,0 +1,93 @@
+name: PostgreSQL Persistence Integration Tests
+
+# Runs on:
+# - All pull requests targeting main that modify persistence, integration tests, or workflow
+# - Direct pushes to main targeting those paths
+#
+# This job requires Docker (via testcontainers). If Docker is unavailable or testcontainers
+# fails, the test fixture would skip locally. In this CI gate, zero skips are permitted:
+# an all-skipped result fails the build so that Docker unavailability cannot be mistaken
+# for successful PostgreSQL verification.
+#
+# SQLite-based tests are intentionally separate; this gate specifically verifies
+# PostgreSQL-specific behaviors:
+# 1. Concurrent idempotency reservation
+# 2. Lease acquisition and fencing
+# 3. Stale expected-version rejection
+# 4. Transaction-boundary rollback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/application-intelligence/src/execution/**'
+      - 'services/application-intelligence/tests/test_persistence_integration.py'
+      - 'services/application-intelligence/tests/test_recovery.py'
+      - '.github/workflows/postgres-integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/application-intelligence/src/execution/**'
+      - 'services/application-intelligence/tests/test_persistence_integration.py'
+      - 'services/application-intelligence/tests/test_recovery.py'
+      - '.github/workflows/postgres-integration.yml'
+
+jobs:
+  postgres-integration:
+    name: PostgreSQL Integration Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: services/application-intelligence
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Verify Docker daemon availability
+        run: |
+          docker info > /dev/null 2>&1 || {
+            echo "ERROR: Docker daemon is not running on GitHub runner."
+            exit 1
+          }
+          echo "Docker daemon verified and running."
+
+      - name: Install dependencies and test extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Run PostgreSQL Integration Tests
+        run: |
+          python -m pytest tests/test_persistence_integration.py -v --tb=short --junitxml=results.xml
+
+      - name: Verify PostgreSQL Tests Actually Executed (Zero Skips Permitted)
+        run: |
+          python -c '
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse("results.xml")
+          root = tree.getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+          if not suites:
+              print("ERROR: No testsuite elements found in JUnit XML.")
+              sys.exit(1)
+          tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
+          failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
+          errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.attrib.get("skipped", 0)) for s in suites)
+          print(f"Gate Results -> Total: {tests}, Failures: {failures}, Errors: {errors}, Skipped: {skipped}")
+          if skipped > 0:
+              print(f"CI GATE FAILURE: {skipped} test(s) skipped! Silent skip due to missing Docker or testcontainers is prohibited.")
+              sys.exit(1)
+          if tests == 0 or failures > 0 or errors > 0:
+              print("CI GATE FAILURE: Test suite did not complete with all passing tests.")
+              sys.exit(1)
+          print("CI GATE PASSED: All PostgreSQL integration tests ran and passed against real PostgreSQL container.")
+          '

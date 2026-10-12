@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/dependency.schema.json",
+  "title": "Dependency",
+  "description": "A software dependency detected between services or to external targets.",
+  "type": "object",
+  "properties": {
+    "source_service_id": {
+      "type": "string",
+      "description": "The ID of the service that has this dependency."
+    },
+    "target_service_id": {
+      "type": "string",
+      "description": "The ID of the service being depended on, if known."
+    },
+    "dependency_type": {
+      "type": "string",
+      "enum": ["http", "database", "cache", "message_queue", "filesystem", "external_api", "runtime", "unknown"],
+      "description": "The type of dependency."
+    },
+    "name": {
+      "type": "string",
+      "description": "The name of the target (e.g. redis, https://api.stripe.com)."
+    },
+    "version": {
+      "type": "string",
+      "description": "The version constraint of the dependency, if applicable."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score of the dependency detection."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "type": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["source", "type"]
+      },
+      "description": "Evidence supporting the dependency detection."
+    }
+  },
+  "required": ["source_service_id", "dependency_type", "evidence"]
+}

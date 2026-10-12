@@ -1,0 +1,31 @@
+version: '3'
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: ./worker
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:15
+
+  redis:
+    image: redis:7

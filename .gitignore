@@ -1,0 +1,62 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project configuration
+.idea/
+.vscode/
+
+# Build and Distribution
+dist/
+build/
+*.egg-info/
+
+# Tests
+.pytest_cache/
+coverage.xml
+htmlcov/
+
+# MacOS
+.DS_Store
+
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Python environments
+.venv/
+venv/
+env/
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
+__pycache__/
+
+# Local sessions and credentials
+.whatsapp_session/
+secrets/
+
+
+# Safe synthetic .env files required by automated tests
+!services/application-intelligence/tests/fixtures/duplicate_evidence/.env
+!services/application-intelligence/tests/fixtures/frontend_backend/frontend/.env
+!services/application-intelligence/tests/fixtures/secrets_fixture/.env
+
+

@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/safety-decision.schema.json",
+  "title": "Safety Decision",
+  "description": "Deterministic evaluation of an experiment's safety and policy compliance.",
+  "type": "object",
+  "properties": {
+    "decision_id": { "type": "string" },
+    "experiment_id": { "type": "string" },
+    "application_id": { "type": "string" },
+    "decision": { "type": "string", "enum": ["blocked", "requires_configuration", "requires_approval", "approved"] },
+    "allowed": { "type": "boolean" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check_id": { "type": "string" },
+          "category": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "fail", "warning", "not_evaluated", "requires_configuration"] },
+          "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+          "message": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "metadata": { "type": "object" }
+        },
+        "required": ["check_id", "category", "status", "severity", "message"]
+      }
+    },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "required_approvals": { "type": "array", "items": { "type": "string" } },
+    "required_conditions": { "type": "array", "items": { "type": "string" } },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "policy_version": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "decision_id", "experiment_id", "application_id", "decision", "allowed",
+    "checks", "blockers", "warnings", "required_approvals", "required_conditions",
+    "evaluated_at", "policy_version"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/experiment-run.schema.json",
+  "title": "Experiment Run",
+  "description": "Deterministic experiment execution lifecycle representation.",
+  "type": "object",
+  "properties": {
+    "run_id": { "type": "string" },
+    "experiment_id": { "type": "string" },
+    "application_id": { "type": "string" },
+    "safety_decision_id": { "type": "string" },
+    "state": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "current_phase": { "type": ["string", "null"] },
+    "approval": { "type": "object" },
+    "preflight": { "type": "object" },
+    "execution": { "type": "object" },
+    "abort": { "type": "object" },
+    "rollback": { "type": "object" },
+    "recovery": { "type": "object" },
+    "evidence_refs": { "type": "array", "items": { "type": "object" } },
+    "error": { "type": ["object", "null"] },
+    "metadata": { "type": "object" },
+    "lifecycle_version": { "type": "string" }
+  },
+  "required": [
+    "run_id", "experiment_id", "application_id", "safety_decision_id", "state",
+    "created_at", "updated_at", "lifecycle_version"
+  ]
+}

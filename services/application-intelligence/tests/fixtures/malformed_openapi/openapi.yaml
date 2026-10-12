@@ -1,0 +1,7 @@
+openapi: 3.0.0
+this is invalid yaml
+  - missing colon
+paths:
+  /test:
+    get:
+      responses:

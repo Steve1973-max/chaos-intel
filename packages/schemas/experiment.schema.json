@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/experiment.schema.json",
+  "title": "Experiment Specification",
+  "description": "A deterministically generated declarative experiment specification.",
+  "type": "object",
+  "properties": {
+    "experiment_id": { "type": "string" },
+    "application_id": { "type": "string" },
+    "candidate_ids": { "type": "array", "items": { "type": "string" } },
+    "name": { "type": "string" },
+    "hypothesis": { "type": "string" },
+    "status": { "type": "string", "enum": ["draft", "requires_review"] },
+    "target": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["type", "id", "name"]
+    },
+    "fault": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "method": { "type": "string" },
+        "parameters": { "type": "object" },
+        "purpose": { "type": "string" }
+      },
+      "required": ["type", "method"]
+    },
+    "duration_seconds": { "type": "integer" },
+    "blast_radius": {
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string", "enum": ["single_service", "single_dependency", "single_api", "single_external_dependency", "multiple_services", "unknown"] },
+        "max_affected_components": { "type": "integer" }
+      },
+      "required": ["scope", "max_affected_components"]
+    },
+    "steady_state": {
+      "type": "object",
+      "properties": {
+        "required": { "type": "boolean" },
+        "checks": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["required"]
+    },
+    "observations": { "type": "array", "items": { "type": "string" } },
+    "abort_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "metric": { "type": "string" },
+          "operator": { "type": "string" },
+          "threshold": {},
+          "action": { "type": "string" },
+          "requires_configuration": { "type": "boolean" }
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "properties": {
+        "strategy": { "type": "string" },
+        "automatic": { "type": "boolean" },
+        "verification_required": { "type": "boolean" }
+      },
+      "required": ["strategy", "automatic"]
+    },
+    "prerequisites": { "type": "array", "items": { "type": "string" } },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "requires_approval": { "type": "boolean" },
+        "environment_required": { "type": "string" },
+        "reversible": { "type": "boolean" },
+        "rollback_required": { "type": "boolean" },
+        "production_allowed": { "type": "boolean" }
+      },
+      "required": ["requires_approval", "production_allowed", "rollback_required"]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "type": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["source", "type", "detail"]
+      }
+    },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "experiment_id", "application_id", "candidate_ids", "name", "hypothesis", 
+    "target", "fault", "duration_seconds", "blast_radius", "steady_state",
+    "abort_conditions", "rollback", "safety", "confidence", "evidence", "status"
+  ]
+}

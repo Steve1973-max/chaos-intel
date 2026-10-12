@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/service.schema.json",
+  "title": "Service",
+  "description": "An individual service or component within an application.",
+  "type": "object",
+  "properties": {
+    "service_id": {
+      "type": "string",
+      "description": "Unique identifier for the service."
+    },
+    "application_id": {
+      "type": "string",
+      "description": "ID of the parent application."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the service."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["frontend", "backend", "worker", "scheduler", "database", "cache", "message_broker", "gateway", "external", "unknown"],
+      "description": "The logical role of the service."
+    },
+    "technology": {
+      "type": "string",
+      "description": "Primary technology (e.g. Node.js, FastAPI)."
+    },
+    "source_path": {
+      "type": "string",
+      "description": "Relative path to the service source code."
+    },
+    "entry_points": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Detected entry points (e.g., main.py, index.js)."
+    },
+    "ports": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "Exposed ports."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score of the service detection."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "type": { "type": "string" },
+          "detail": { "type": "string" }
+        },
+        "required": ["source", "type"]
+      },
+      "description": "Evidence supporting the service detection."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Arbitrary metadata."
+    }
+  },
+  "required": ["service_id", "application_id", "name", "type", "source_path"]
+}
