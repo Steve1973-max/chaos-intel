@@ -596,3 +596,4 @@ def pg_record_chaos_run_lifecycle(
     except Exception as exc:
         logger.warning(f"Failed to record chaos run lifecycle in PostgreSQL for {run_id}: {exc}")
         return None
+

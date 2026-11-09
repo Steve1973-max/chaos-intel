@@ -77,7 +77,7 @@ class TestingAgentsClient(BaseServiceClient):
         if self._engine is not None and ExecutionApproval is not None:
             try:
                 plan_id = getattr(plan, "plan_id", "plan-01")
-                app_id = getattr(app, "application_id", "app-01")
+                app_id = getattr(plan, "application_id", None) or getattr(app, "application_id", "app-01")
                 approval = ExecutionApproval(
                     approval_id=f"appr-{plan_id[:8]}",
                     approved_by="operator-system",

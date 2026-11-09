@@ -1,39 +1,38 @@
 -- Initial PostgreSQL schema initialization for CHAOS-INTEL Platform
 CREATE TABLE IF NOT EXISTS applications (
-    application_id VARCHAR(64) PRIMARY KEY,
+    id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    source_type VARCHAR(32) NOT NULL DEFAULT 'directory',
+    source_type VARCHAR(64) NOT NULL DEFAULT 'directory',
     source_location TEXT NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'registered',
-    registered_at VARCHAR(64) NOT NULL,
-    services_count INT NOT NULL DEFAULT 0,
-    apis_count INT NOT NULL DEFAULT 0,
-    technologies JSONB NOT NULL DEFAULT '[]'::jsonb,
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    file_hash VARCHAR(64),
+    status VARCHAR(32) NOT NULL DEFAULT 'registered' CONSTRAINT check_valid_app_status CHECK (status IN ('registered', 'analyzing', 'analyzed', 'failed')),
+    metadata_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_app_name ON applications(name);
 
 CREATE TABLE IF NOT EXISTS background_jobs (
-    job_id VARCHAR(64) PRIMARY KEY,
+    id VARCHAR(64) PRIMARY KEY,
     task_name VARCHAR(128) NOT NULL,
-    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     correlation_id VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'queued' CONSTRAINT check_valid_job_status CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'dead_letter')),
     priority INT NOT NULL DEFAULT 0,
-    status VARCHAR(32) NOT NULL DEFAULT 'queued',
-    worker_id VARCHAR(64),
-    retry_count INT NOT NULL DEFAULT 0,
-    max_retries INT NOT NULL DEFAULT 3,
-    outcome_uncertain BOOLEAN NOT NULL DEFAULT FALSE,
-    is_cancelled BOOLEAN NOT NULL DEFAULT FALSE,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     result JSONB,
     error JSONB,
-    created_at VARCHAR(64) NOT NULL,
-    started_at VARCHAR(64),
-    completed_at VARCHAR(64)
+    retry_count INT NOT NULL DEFAULT 0,
+    max_retries INT NOT NULL DEFAULT 3,
+    timeout_seconds INT NOT NULL DEFAULT 300,
+    worker_id VARCHAR(128),
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_jobs_status_priority ON background_jobs(status, priority DESC);
+CREATE INDEX IF NOT EXISTS idx_job_status_priority ON background_jobs(status, priority);
 CREATE INDEX IF NOT EXISTS idx_jobs_correlation_id ON background_jobs(correlation_id);
 
 -- Execution Persistence & Reliability Tables

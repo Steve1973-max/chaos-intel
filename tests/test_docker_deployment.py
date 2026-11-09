@@ -448,8 +448,8 @@ async def test_3_worker_idempotency_failure_handling_and_restart_resilience():
     with engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO background_jobs (id, task_name, correlation_id, status, priority, payload, retry_count, max_retries, timeout_seconds) "
-                "VALUES (:id, 'nonexistent_task_xyz', 'corr-fail-01', 'queued', 5, '{}'::json, 0, 3, 30)"
+                "INSERT INTO background_jobs (id, task_name, correlation_id, status, priority, retry_count, max_retries, timeout_seconds) "
+                "VALUES (:id, 'nonexistent_task_xyz', 'corr-fail-01', 'queued', 5, 0, 3, 30)"
             ),
             {"id": fail_job_id},
         )

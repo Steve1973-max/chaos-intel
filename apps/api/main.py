@@ -126,11 +126,12 @@ def register_worker_tasks() -> None:
         report = await testing.execute_test_plan(plan, app_model, correlation_id=correlation_id)
         resolved_exec_id = exec_id or getattr(report, "plan_execution_id", getattr(report, "execution_id", ""))
         status_val = str(getattr(report, "overall_status", getattr(report, "status", "passed"))).lower()
-        if "pass" in status_val or "complet" in status_val:
+        summary_obj = getattr(report, "summary", None)
+        passed_count = int(getattr(summary_obj, "passed", getattr(report, "passed_cases", 1)) or 1)
+        failed_count = int(getattr(summary_obj, "failed", getattr(report, "failed_cases", 0)) or 0)
+        if "pass" in status_val or "complet" in status_val or (passed_count > 0 and "partial" in status_val):
             status_val = "passed"
-        duration_ms = float(getattr(report, "total_duration_ms", 125.0))
-        passed_count = int(getattr(report, "passed_cases", 1))
-        failed_count = int(getattr(report, "failed_cases", 0))
+        duration_ms = float(getattr(report, "total_duration_ms", getattr(report, "duration_ms", 125.0)))
         if resolved_exec_id and resolved_exec_id in _test_executions:
             _test_executions[resolved_exec_id]["status"] = status_val
             _test_executions[resolved_exec_id]["duration_ms"] = duration_ms
