@@ -8,7 +8,8 @@ dependencies = [
     "networkx>=3.0",
     "sqlalchemy>=2.0",
     "alembic>=1.13.0",
-    "psycopg[binary]>=3.0.0"
+    "psycopg[binary]>=3.0.0",
+    "pyyaml>=6.0"
 ]
 
 [project.optional-dependencies]

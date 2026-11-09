@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi uvicorn pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio pytest pytest-asyncio testcontainers python-multipart networkx alembic jsonschema referencing
+          pip install fastapi uvicorn pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio pytest pytest-asyncio testcontainers python-multipart networkx alembic jsonschema referencing pyyaml
 
       - name: Run Gateway & Integration Tests
         run: |

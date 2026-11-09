@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements
 COPY requirements.txt* ./
 RUN pip install --upgrade pip && \
-    pip install fastapi uvicorn[standard] pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio python-multipart networkx alembic jsonschema referencing
+    pip install fastapi uvicorn[standard] pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio python-multipart networkx alembic jsonschema referencing pyyaml
 
 # Copy application code
 COPY apps/api /app/apps/api
