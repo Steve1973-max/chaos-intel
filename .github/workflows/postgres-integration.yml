@@ -20,6 +20,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'services/application-intelligence/pyproject.toml'
       - 'services/application-intelligence/src/execution/**'
       - 'services/application-intelligence/tests/test_persistence_integration.py'
       - 'services/application-intelligence/tests/test_recovery.py'
@@ -27,6 +28,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'services/application-intelligence/pyproject.toml'
       - 'services/application-intelligence/src/execution/**'
       - 'services/application-intelligence/tests/test_persistence_integration.py'
       - 'services/application-intelligence/tests/test_recovery.py'

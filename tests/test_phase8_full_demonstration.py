@@ -26,7 +26,7 @@ def _build_sample_app_zip() -> bytes:
     return buf.getvalue()
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_phase8_full_12_step_demonstration():
     """Execute and verify all 12 steps of the Phase 8 platform demonstration."""
     worker = get_background_worker()

@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip && \
-    pip install fastapi uvicorn pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio python-multipart
+    pip install fastapi uvicorn pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio python-multipart networkx alembic jsonschema referencing
 
 COPY packages /app/packages
 COPY services /app/services
