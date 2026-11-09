@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Gateway & Integration Tests
         run: |
-          PYTHONPATH=".:services/application-intelligence/src:services/application-intelligence" pytest tests/ --ignore=tests/test_browser_e2e.py -v --tb=short
+          PYTHONPATH=".:services/application-intelligence/src:services/application-intelligence" pytest tests/ --ignore=tests/test_browser_e2e.py --ignore=tests/test_docker_deployment.py -v --tb=short
 
       - name: Run Application Intelligence Tests
         run: |
@@ -148,4 +148,82 @@ jobs:
               sys.exit(1)
           print("CI GATE PASSED: All PostgreSQL integration tests ran and passed against real PostgreSQL container.")
           '
+
+  docker-compose-deployment:
+    name: Docker Compose Full Deployment Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Verify Docker and Docker Compose
+        run: |
+          docker info > /dev/null 2>&1 || {
+            echo "ERROR: Docker daemon is not running on runner."
+            exit 1
+          }
+          docker compose version
+          docker compose config -q
+          echo "Docker and docker-compose.yml configuration verified."
+
+      - name: Install Verification & Playwright Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx pytest pytest-asyncio sqlalchemy psycopg[binary] playwright
+          playwright install --with-deps chromium
+
+      - name: Build All Docker Compose Images
+        run: |
+          docker compose build
+
+      - name: Start Full Stack and Wait for Health Checks
+        run: |
+          docker compose up -d --wait --wait-timeout 150
+          docker compose ps
+
+      - name: Run Full Docker Deployment E2E, Worker, Postgres & Playwright Verification
+        env:
+          CHAOS_DOCKER_E2E: '1'
+          DOCKER_WEB_URL: 'http://127.0.0.1:80'
+          DOCKER_API_URL: 'http://127.0.0.1:8000'
+          DOCKER_POSTGRES_URL: 'postgresql+psycopg://postgres:postgres@127.0.0.1:5432/chaos_intel'
+        run: |
+          python -m pytest tests/test_docker_deployment.py -v --tb=short --junitxml=docker-e2e-results.xml
+
+      - name: Verify Docker E2E Tests Executed With Zero Skips
+        if: always()
+        run: |
+          python -c '
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse("docker-e2e-results.xml")
+          root = tree.getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+          tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
+          failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
+          errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.attrib.get("skipped", 0)) for s in suites)
+          print(f"Docker E2E Gate -> Total: {tests}, Failures: {failures}, Errors: {errors}, Skipped: {skipped}")
+          if skipped > 0 or tests < 4 or failures > 0 or errors > 0:
+              print("DOCKER DEPLOYMENT GATE FAILURE: Not all Docker E2E tests passed.")
+              sys.exit(1)
+          print("DOCKER DEPLOYMENT GATE PASSED: All 4 Docker Compose E2E verification tests passed.")
+          '
+
+      - name: Collect Container Logs on Failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+
+      - name: Shut Down Docker Compose Stack
+        if: always()
+        run: |
+          docker compose down -v --remove-orphans
+
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -10,15 +8,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-chaos_intel}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d chaos_intel"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - chaos-net
 
@@ -27,14 +25,14 @@ services:
     container_name: chaos-intel-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - chaos-net
 
@@ -56,10 +54,17 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:-chaos-intel-supersecret-production-key}
       UPLOAD_DIR: /app/staging_uploads
+      DISABLE_EMBEDDED_WORKER: "1"
     ports:
       - "8000:8000"
     volumes:
       - staging_uploads:/app/staging_uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - chaos-net
 
@@ -80,8 +85,15 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/chaos_intel
       REDIS_URL: redis://redis:6379/0
       UPLOAD_DIR: /app/staging_uploads
+      WORKER_ID: chaos-intel-worker-01
     volumes:
       - staging_uploads:/app/staging_uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import workers.worker; print('ok')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - chaos-net
 
@@ -92,9 +104,16 @@ services:
     container_name: chaos-intel-web
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "80:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     networks:
       - chaos-net
 

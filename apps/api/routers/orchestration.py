@@ -113,6 +113,16 @@ async def list_jobs(
     user: UserContext = Depends(require_role("viewer")),
 ) -> PaginatedResponse[PipelineJobStatusResponse]:
     """Retrieve paginated list of background jobs."""
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_list_jobs
+        from workers.queue import Job
+        if is_postgres_enabled():
+            jobs_dict_ref = getattr(queue, "_jobs", None)
+            if isinstance(jobs_dict_ref, dict):
+                for r in pg_list_jobs():
+                    jobs_dict_ref[r["job_id"]] = Job(**r)
+    except Exception:
+        pass
     jobs_dict = getattr(queue, "_jobs", {})
     all_jobs = [
         PipelineJobStatusResponse(

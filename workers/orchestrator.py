@@ -85,6 +85,21 @@ class DistributedOrchestrator:
             if cached is not None:
                 logger.info(f"Idempotent pipeline request detected for key '{idempotency_key}'. Returning existing result.")
                 return cached
+            try:
+                from workers.db_persistence import is_postgres_enabled, pg_reserve_idempotency
+                if is_postgres_enabled():
+                    status_idem, existing_res = pg_reserve_idempotency(
+                        application_id=application_name or "platform",
+                        operation_scope="end_to_end_pipeline",
+                        idempotency_key=idempotency_key,
+                        fingerprint=f"{application_name}:{source_path}",
+                        owner_id=pipeline_id,
+                    )
+                    if status_idem == "completed" and existing_res is not None:
+                        self._idempotency_cache[idempotency_key] = existing_res
+                        return existing_res
+            except Exception as exc:
+                logger.warning(f"PostgreSQL idempotency check warning: {exc}")
 
         logger.info(f"Starting distributed pipeline '{pipeline_id}' (correlation '{correlation_id}')")
 
@@ -96,11 +111,19 @@ class DistributedOrchestrator:
         app_metadata = {
             "application_id": app_id,
             "name": application_name,
-            "source_path": source_path,
+            "source_type": "directory",
+            "source_location": source_path,
+            "status": "registered",
             "registered_at": utcnow_iso(),
         }
         # In a PostgreSQL environment, this registers in 'applications' table via short transaction.
         # DB connection is closed immediately; NEVER held during Step 2.
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_save_application
+            if is_postgres_enabled():
+                pg_save_application(app_metadata)
+        except Exception:
+            pass
         timeline[-1]["completed_at"] = utcnow_iso()
         timeline[-1]["status"] = "COMPLETED"
 
@@ -111,6 +134,19 @@ class DistributedOrchestrator:
         app_model = await self.app_intel.analyze_application(source_path, correlation_id=correlation_id)
         if not app_model:
             raise RuntimeError(f"Step 2 failed: Application Intelligence returned empty model for '{source_path}'")
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_save_application
+            if is_postgres_enabled():
+                app_metadata["status"] = "analyzed"
+                app_metadata["services_count"] = len(app_model.services or [])
+                app_metadata["apis_count"] = len(app_model.apis or [])
+                app_metadata["technologies"] = [getattr(t, "name", str(t)) for t in (app_model.technologies or [])]
+                pg_save_application(
+                    app_metadata,
+                    analyzed_model_dump=app_model.model_dump(mode="json") if hasattr(app_model, "model_dump") else None,
+                )
+        except Exception:
+            pass
         timeline[-1]["completed_at"] = utcnow_iso()
         timeline[-1]["status"] = "COMPLETED"
         timeline[-1]["services_discovered"] = len(app_model.services or [])
@@ -185,6 +221,19 @@ class DistributedOrchestrator:
             correlation_id=correlation_id,
             dry_run=True,
         )
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_record_chaos_run_lifecycle
+            if is_postgres_enabled():
+                pg_record_chaos_run_lifecycle(
+                    run_id=str(uuid.uuid4()),
+                    application_id=app_model.application_id,
+                    experiment_id=exp_id,
+                    safety_decision_id=spec_dict.get("safety_decision_id", "sec-01"),
+                    correlation_id=correlation_id,
+                    approved_by=approver,
+                )
+        except Exception:
+            pass
         timeline[-1]["completed_at"] = utcnow_iso()
         timeline[-1]["status"] = "COMPLETED"
         timeline[-1]["verdict"] = getattr(chaos_report, "verdict", "DRY_RUN_VERIFIED")
@@ -257,6 +306,18 @@ class DistributedOrchestrator:
         self._completed_pipelines[pipeline_id] = final_summary
         if idempotency_key:
             self._idempotency_cache[idempotency_key] = final_summary
+            try:
+                from workers.db_persistence import is_postgres_enabled, pg_publish_idempotency
+                if is_postgres_enabled():
+                    pg_publish_idempotency(
+                        application_id=application_name or "platform",
+                        operation_scope="end_to_end_pipeline",
+                        idempotency_key=idempotency_key,
+                        owner_id=pipeline_id,
+                        result=final_summary,
+                    )
+            except Exception:
+                pass
 
         logger.info(f"Pipeline '{pipeline_id}' successfully completed all 10 steps.")
         return final_summary

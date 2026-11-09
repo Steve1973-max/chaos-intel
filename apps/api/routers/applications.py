@@ -116,6 +116,12 @@ async def register_application(
         "metadata": payload.metadata,
     }
     _applications_store[app_id] = app_record
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_save_application
+        if is_postgres_enabled():
+            pg_save_application(app_record)
+    except Exception:
+        pass
 
     return ApplicationResponse(**app_record)
 
@@ -163,6 +169,12 @@ async def upload_application_archive(
         "technologies": [],
     }
     _applications_store[app_id] = app_record
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_save_application
+        if is_postgres_enabled():
+            pg_save_application(app_record)
+    except Exception:
+        pass
     return ApplicationResponse(**app_record)
 
 
@@ -176,6 +188,17 @@ async def analyze_application(
     """Submit background static analysis job for an application."""
     app = _applications_store.get(application_id)
     if not app:
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_get_application
+            if is_postgres_enabled():
+                pg_app = pg_get_application(application_id)
+                if pg_app:
+                    pg_app.pop("analyzed_model", None)
+                    _applications_store[application_id] = pg_app
+                    app = pg_app
+        except Exception:
+            pass
+    if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Application '{application_id}' not found")
 
     job_id = await queue.enqueue(
@@ -184,6 +207,12 @@ async def analyze_application(
         correlation_id=correlation_id,
     )
     app["status"] = "analyzing"
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_save_application
+        if is_postgres_enabled():
+            pg_save_application(app)
+    except Exception:
+        pass
     return {
         "job_id": job_id,
         "application_id": application_id,
@@ -199,6 +228,15 @@ async def get_application(
     user: UserContext = Depends(require_role("viewer")),
 ) -> ApplicationResponse:
     """Retrieve application summary."""
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_get_application
+        if is_postgres_enabled():
+            pg_app = pg_get_application(application_id)
+            if pg_app:
+                pg_app.pop("analyzed_model", None)
+                _applications_store[application_id] = pg_app
+    except Exception:
+        pass
     app = _applications_store.get(application_id)
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Application '{application_id}' not found")
@@ -320,6 +358,13 @@ async def list_applications(
     user: UserContext = Depends(require_role("viewer")),
 ) -> PaginatedResponse[ApplicationResponse]:
     """Retrieve paginated list of registered applications."""
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_list_applications
+        if is_postgres_enabled():
+            for pg_app in pg_list_applications():
+                _applications_store[pg_app["application_id"]] = pg_app
+    except Exception:
+        pass
     all_apps = [ApplicationResponse(**app) for app in _applications_store.values()]
     total = len(all_apps)
     sliced = all_apps[offset : offset + limit]

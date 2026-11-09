@@ -109,11 +109,31 @@ class InMemoryJobQueue:
             )
             self._jobs[job_id] = job
             self._counter += 1
+            # Persist to PostgreSQL and notify Redis when enabled
+            from workers.db_persistence import is_postgres_enabled, pg_enqueue_job
+            if is_postgres_enabled():
+                pg_enqueue_job(job)
             # Priority queue sorts lowest first; negate priority so higher priority dequeues first
             await self._queue.put((-priority, self._counter, job_id))
             return job_id
 
     async def dequeue(self, timeout_seconds: float = 1.0) -> Optional[Job]:
+        from workers.db_persistence import is_postgres_enabled, pg_claim_next_queued_job
+        if is_postgres_enabled():
+            claimed = pg_claim_next_queued_job("chaos-intel-worker")
+            if claimed is not None:
+                job = Job(**claimed)
+                async with self._lock:
+                    self._jobs[job.job_id] = job
+                # Drain matching local queue item if present
+                try:
+                    self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                return job
+            await asyncio.sleep(min(timeout_seconds, 0.25))
+            return None
+
         try:
             _, _, job_id = await asyncio.wait_for(self._queue.get(), timeout=timeout_seconds)
             async with self._lock:
@@ -127,25 +147,50 @@ class InMemoryJobQueue:
             return None
 
     async def get_job(self, job_id: str) -> Optional[Job]:
+        from workers.db_persistence import is_postgres_enabled, pg_get_job
+        if is_postgres_enabled():
+            pg_data = pg_get_job(job_id)
+            if pg_data is not None:
+                job = Job(**pg_data)
+                async with self._lock:
+                    self._jobs[job_id] = job
+                return job
         async with self._lock:
             return self._jobs.get(job_id)
 
     async def update_job(self, job: Job) -> None:
+        from workers.db_persistence import is_postgres_enabled, pg_update_job
         async with self._lock:
             self._jobs[job.job_id] = job
+        if is_postgres_enabled():
+            pg_update_job(job)
 
     async def cancel_job(self, job_id: str) -> bool:
+        from workers.db_persistence import is_postgres_enabled, pg_get_job, pg_update_job
         async with self._lock:
             job = self._jobs.get(job_id)
+            if not job and is_postgres_enabled():
+                pg_data = pg_get_job(job_id)
+                if pg_data:
+                    job = Job(**pg_data)
+                    self._jobs[job_id] = job
             if not job:
                 return False
             job.is_cancelled = True
             if job.status in ("queued", "running"):
                 job.status = "cancelled"
                 job.completed_at = utcnow_iso()
-            return True
+        if is_postgres_enabled():
+            pg_update_job(job)
+        return True
 
     async def get_dead_letter_jobs(self) -> List[Job]:
+        from workers.db_persistence import is_postgres_enabled, pg_list_jobs
+        if is_postgres_enabled():
+            rows = pg_list_jobs(status_filter="dead_letter")
+            async with self._lock:
+                for r in rows:
+                    self._jobs[r["job_id"]] = Job(**r)
         async with self._lock:
             return [j for j in self._jobs.values() if j.status == "dead_letter"]
 

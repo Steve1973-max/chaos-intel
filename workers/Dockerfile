@@ -21,6 +21,8 @@ COPY packages /app/packages
 COPY services /app/services
 COPY workers /app/workers
 COPY apps/api /app/apps/api
+COPY examples /app/examples
+RUN mkdir -p /app/staging_uploads
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import workers.worker; print('ok')" || exit 1

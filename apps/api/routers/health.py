@@ -51,6 +51,14 @@ async def get_services_health(
     fi_health = await failure.check_health()
 
     dlq_count = len(await queue.get_dead_letter_jobs())
+    pg_health = {"status": "DISABLED"}
+    redis_health = {"status": "DISABLED"}
+    try:
+        from workers.db_persistence import check_postgres_health, check_redis_health
+        pg_health = check_postgres_health()
+        redis_health = check_redis_health()
+    except Exception:
+        pass
 
     services_status = {
         "application_intelligence": ai_health,
@@ -61,6 +69,8 @@ async def get_services_health(
             "status": "HEALTHY",
             "type": type(queue).__name__,
             "dead_letter_jobs_count": dlq_count,
+            "postgres": pg_health,
+            "redis": redis_health,
         },
     }
 

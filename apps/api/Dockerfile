@@ -25,6 +25,8 @@ COPY apps/api /app/apps/api
 COPY packages /app/packages
 COPY services /app/services
 COPY workers /app/workers
+COPY examples /app/examples
+RUN mkdir -p /app/staging_uploads
 
 EXPOSE 8000
 

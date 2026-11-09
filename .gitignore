@@ -28,6 +28,7 @@ node_modules/
 coverage.xml
 htmlcov/
 results.xml
+docker-e2e-results.xml
 staging_uploads/
 *.log
 

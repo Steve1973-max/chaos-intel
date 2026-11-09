@@ -81,6 +81,26 @@ class ApplicationIntelligenceClient(BaseServiceClient):
             if getattr(m, "application_id", "") == application_id:
                 return m
 
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_get_application
+            if is_postgres_enabled():
+                meta = pg_get_application(application_id)
+                if meta:
+                    analyzed_dump = meta.get("analyzed_model")
+                    if analyzed_dump and hasattr(ApplicationModel, "model_validate"):
+                        model = ApplicationModel.model_validate(analyzed_dump)
+                        model.application_id = application_id
+                        self._cache[application_id] = model
+                        return model
+                    src_loc = meta.get("source_location")
+                    if src_loc and self.direct_adapter is not None:
+                        model = self.direct_adapter(src_loc)
+                        model.application_id = application_id
+                        self._cache[application_id] = model
+                        return model
+        except Exception:
+            pass
+
         if len(self._cache) == 1:
             return next(iter(self._cache.values()))
 

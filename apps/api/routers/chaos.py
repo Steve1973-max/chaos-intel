@@ -120,10 +120,46 @@ async def initiate_chaos_execution(
 
     await queue.enqueue(
         task_name="run_chaos_experiment",
-        payload={"run_id": run_id, "experiment_id": payload.experiment_id, "application_id": payload.application_id},
+        payload={
+            "run_id": run_id,
+            "experiment_id": payload.experiment_id,
+            "application_id": payload.application_id,
+            "fault_type": exp["fault_type"],
+            "target_id": exp["target_service_id"],
+            "safety_decision_id": exp.get("safety_decision_id", "sec-01"),
+            "approved_by": exp.get("approved_by", "admin"),
+        },
         correlation_id=correlation_id,
     )
     return ChaosReportResponse(**record)
+
+
+def _sync_chaos_runs_from_pg() -> None:
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_list_jobs
+        if not is_postgres_enabled():
+            return
+        for j in pg_list_jobs(task_name_filter="run_chaos_experiment"):
+            payload = j.get("payload") or {}
+            res = j.get("result") or {}
+            run_id = res.get("run_id") or payload.get("run_id")
+            if not run_id:
+                continue
+            existing = _chaos_runs.get(run_id, {})
+            completed = j.get("status") == "completed"
+            _chaos_runs[run_id] = {
+                "run_id": run_id,
+                "experiment_id": res.get("experiment_id") or payload.get("experiment_id") or existing.get("experiment_id", ""),
+                "verdict": res.get("verdict", "DRY_RUN_VERIFIED") if completed else existing.get("verdict", "DRY_RUN_QUEUED"),
+                "dry_run": True,
+                "live_execution": False,
+                "fault_type": res.get("fault_type") or payload.get("fault_type") or existing.get("fault_type", "network_latency"),
+                "target_id": res.get("target_id") or payload.get("target_id") or existing.get("target_id", "svc-default"),
+                "recovery_status": res.get("recovery_status", "SIMULATED_RECOVERED") if completed else existing.get("recovery_status", "PENDING"),
+                "timeline": res.get("timeline", existing.get("timeline", [])),
+            }
+    except Exception:
+        pass
 
 
 @router.get("/executions/{run_id}", response_model=ChaosReportResponse)
@@ -133,6 +169,7 @@ async def get_chaos_execution(
     user: UserContext = Depends(require_role("viewer")),
 ) -> ChaosReportResponse:
     """Retrieve chaos experiment execution report."""
+    _sync_chaos_runs_from_pg()
     rec = _chaos_runs.get(run_id)
     if not rec:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Chaos run '{run_id}' not found")
@@ -147,6 +184,7 @@ async def list_chaos_executions(
     user: UserContext = Depends(require_role("viewer")),
 ) -> PaginatedResponse[ChaosReportResponse]:
     """Retrieve paginated list of chaos runs."""
+    _sync_chaos_runs_from_pg()
     all_runs = [ChaosReportResponse(**r) for r in _chaos_runs.values()]
     total = len(all_runs)
     sliced = all_runs[offset : offset + limit]

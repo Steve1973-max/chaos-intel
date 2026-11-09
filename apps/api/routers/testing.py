@@ -113,6 +113,33 @@ async def initiate_test_execution(
     return TestExecutionResponse(**record)
 
 
+def _sync_test_executions_from_pg() -> None:
+    try:
+        from workers.db_persistence import is_postgres_enabled, pg_list_jobs
+        if not is_postgres_enabled():
+            return
+        for j in pg_list_jobs(task_name_filter="execute_tests"):
+            payload = j.get("payload") or {}
+            res = j.get("result") or {}
+            exec_id = res.get("execution_id") or payload.get("execution_id")
+            if not exec_id:
+                continue
+            existing = _test_executions.get(exec_id, {})
+            status_val = res.get("status") if j.get("status") == "completed" else j.get("status", "queued")
+            _test_executions[exec_id] = {
+                "execution_id": exec_id,
+                "plan_id": res.get("plan_id") or payload.get("plan_id") or existing.get("plan_id", ""),
+                "application_id": res.get("application_id") or payload.get("application_id") or existing.get("application_id", ""),
+                "status": status_val or "passed",
+                "duration_ms": float(res.get("duration_ms", existing.get("duration_ms", 0.0))),
+                "passed_count": int(res.get("passed_count", existing.get("passed_count", 0))),
+                "failed_count": int(res.get("failed_count", existing.get("failed_count", 0))),
+                "step_results": res.get("step_results", existing.get("step_results", [])),
+            }
+    except Exception:
+        pass
+
+
 @router.get("/executions/{execution_id}", response_model=TestExecutionResponse)
 async def get_test_execution(
     execution_id: str,
@@ -120,6 +147,7 @@ async def get_test_execution(
     user: UserContext = Depends(require_role("viewer")),
 ) -> TestExecutionResponse:
     """Retrieve test execution status and results."""
+    _sync_test_executions_from_pg()
     rec = _test_executions.get(execution_id)
     if not rec:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Execution '{execution_id}' not found")
@@ -134,6 +162,7 @@ async def list_test_executions(
     user: UserContext = Depends(require_role("viewer")),
 ) -> PaginatedResponse[TestExecutionResponse]:
     """Retrieve paginated list of test executions."""
+    _sync_test_executions_from_pg()
     all_execs = [TestExecutionResponse(**e) for e in _test_executions.values()]
     total = len(all_execs)
     sliced = all_execs[offset : offset + limit]

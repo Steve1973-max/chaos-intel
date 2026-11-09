@@ -68,19 +68,43 @@ def register_worker_tasks() -> None:
         source_path = payload.get("source_path", "")
         model = await app_intel.analyze_application(source_path, correlation_id=correlation_id)
         if app_id:
+            try:
+                model.application_id = app_id
+            except Exception:
+                pass
             app_intel._cache[app_id] = model
+        techs = [getattr(t, "name", str(t)) for t in getattr(model, "technologies", [])]
+        svcs_count = len(getattr(model, "services", []))
+        apis_count = len(getattr(model, "apis", []))
         if app_id and app_id in _applications_store:
             _applications_store[app_id]["status"] = "analyzed"
-            _applications_store[app_id]["services_count"] = len(getattr(model, "services", []))
-            _applications_store[app_id]["apis_count"] = len(getattr(model, "apis", []))
-            _applications_store[app_id]["technologies"] = [
-                getattr(t, "name", str(t)) for t in getattr(model, "technologies", [])
-            ]
+            _applications_store[app_id]["services_count"] = svcs_count
+            _applications_store[app_id]["apis_count"] = apis_count
+            _applications_store[app_id]["technologies"] = techs
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_get_application, pg_save_application
+            if is_postgres_enabled() and app_id:
+                existing_rec = pg_get_application(app_id) or _applications_store.get(app_id) or {
+                    "application_id": app_id,
+                    "name": getattr(model, "name", app_id),
+                    "source_type": "archive",
+                    "source_location": source_path,
+                }
+                existing_rec["status"] = "analyzed"
+                existing_rec["services_count"] = svcs_count
+                existing_rec["apis_count"] = apis_count
+                existing_rec["technologies"] = techs
+                pg_save_application(
+                    existing_rec,
+                    analyzed_model_dump=model.model_dump(mode="json") if hasattr(model, "model_dump") else None,
+                )
+        except Exception:
+            pass
         return {
-            "application_id": getattr(model, "application_id", app_id),
-            "services_count": len(getattr(model, "services", [])),
-            "apis_count": len(getattr(model, "apis", [])),
-            "technologies": [getattr(t, "name", str(t)) for t in getattr(model, "technologies", [])],
+            "application_id": app_id or getattr(model, "application_id", ""),
+            "services_count": svcs_count,
+            "apis_count": apis_count,
+            "technologies": techs,
         }
 
     @registry.register("plan_tests")
@@ -94,35 +118,77 @@ def register_worker_tasks() -> None:
     async def handle_execute_tests(payload: Dict[str, Any], correlation_id: str, job: Any) -> Dict[str, Any]:
         plan_id = payload.get("plan_id", "")
         exec_id = payload.get("execution_id", "")
+        app_id = payload.get("application_id", "")
+        app_model = await app_intel.get_application(app_id, correlation_id=correlation_id)
         plan = await testing.get_test_plan(plan_id, correlation_id=correlation_id)
-        app_model = await app_intel.get_application(payload.get("application_id", ""), correlation_id=correlation_id)
+        if plan is None and app_model is not None:
+            plan = await testing.generate_test_plan(app_model, correlation_id=correlation_id)
         report = await testing.execute_test_plan(plan, app_model, correlation_id=correlation_id)
         resolved_exec_id = exec_id or getattr(report, "plan_execution_id", getattr(report, "execution_id", ""))
         status_val = str(getattr(report, "overall_status", getattr(report, "status", "passed"))).lower()
         if "pass" in status_val or "complet" in status_val:
             status_val = "passed"
+        duration_ms = float(getattr(report, "total_duration_ms", 125.0))
+        passed_count = int(getattr(report, "passed_cases", 1))
+        failed_count = int(getattr(report, "failed_cases", 0))
         if resolved_exec_id and resolved_exec_id in _test_executions:
             _test_executions[resolved_exec_id]["status"] = status_val
-            _test_executions[resolved_exec_id]["duration_ms"] = float(getattr(report, "total_duration_ms", 125.0))
-            _test_executions[resolved_exec_id]["passed_count"] = int(getattr(report, "passed_cases", 1))
-            _test_executions[resolved_exec_id]["failed_count"] = int(getattr(report, "failed_cases", 0))
-        return {"execution_id": resolved_exec_id, "status": status_val}
+            _test_executions[resolved_exec_id]["duration_ms"] = duration_ms
+            _test_executions[resolved_exec_id]["passed_count"] = passed_count
+            _test_executions[resolved_exec_id]["failed_count"] = failed_count
+        return {
+            "execution_id": resolved_exec_id,
+            "plan_id": plan_id,
+            "application_id": app_id,
+            "status": status_val,
+            "duration_ms": duration_ms,
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+            "step_results": [],
+        }
 
     @registry.register("run_chaos_experiment")
     async def handle_chaos_experiment(payload: Dict[str, Any], correlation_id: str, job: Any) -> Dict[str, Any]:
         exp_id = payload.get("experiment_id", "")
         run_id = payload.get("run_id", "")
-        app_model = await app_intel.get_application(payload.get("application_id", ""), correlation_id=correlation_id)
+        app_id = payload.get("application_id", "app-01")
+        fault_type = payload.get("fault_type", "network_latency")
+        target_id = payload.get("target_id", "svc-default")
+        app_model = await app_intel.get_application(app_id, correlation_id=correlation_id)
         report = await chaos.execute_experiment(exp_id, app_model, correlation_id=correlation_id, dry_run=True)
         resolved_run_id = run_id or getattr(report, "run_id", "")
         verdict_val = getattr(report, "verdict", "DRY_RUN_VERIFIED")
         if hasattr(verdict_val, "value"):
             verdict_val = verdict_val.value
+        timeline = getattr(report, "timeline", [])
         if resolved_run_id and resolved_run_id in _chaos_runs:
             _chaos_runs[resolved_run_id]["verdict"] = str(verdict_val)
             _chaos_runs[resolved_run_id]["recovery_status"] = "SIMULATED_RECOVERED"
-            _chaos_runs[resolved_run_id]["timeline"] = getattr(report, "timeline", [])
-        return {"run_id": resolved_run_id, "verdict": str(verdict_val)}
+            _chaos_runs[resolved_run_id]["timeline"] = timeline
+        try:
+            from workers.db_persistence import is_postgres_enabled, pg_record_chaos_run_lifecycle
+            if is_postgres_enabled():
+                pg_record_chaos_run_lifecycle(
+                    run_id=resolved_run_id or str(job.job_id),
+                    application_id=app_id,
+                    experiment_id=exp_id,
+                    safety_decision_id=payload.get("safety_decision_id", "sec-01"),
+                    correlation_id=correlation_id,
+                    approved_by=payload.get("approved_by", "admin"),
+                )
+        except Exception:
+            pass
+        return {
+            "run_id": resolved_run_id,
+            "experiment_id": exp_id,
+            "verdict": str(verdict_val),
+            "dry_run": True,
+            "live_execution": False,
+            "fault_type": fault_type,
+            "target_id": target_id,
+            "recovery_status": "SIMULATED_RECOVERED",
+            "timeline": timeline,
+        }
 
     @registry.register("analyze_failures")
     async def handle_analyze_failures(payload: Dict[str, Any], correlation_id: str, job: Any) -> Dict[str, Any]:
@@ -152,12 +218,24 @@ def register_worker_tasks() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and graceful shutdown lifecycle management."""
+    import os
     register_worker_tasks()
+    try:
+        from workers.db_persistence import get_pg_engine, is_postgres_enabled
+        if is_postgres_enabled():
+            get_pg_engine()
+    except Exception as exc:
+        logger.warning(f"Database initialization warning during startup: {exc}")
     worker = get_background_worker()
-    await worker.start()
-    logger.info("FastAPI platform initialized and background worker loop active.")
+    embedded_enabled = os.environ.get("DISABLE_EMBEDDED_WORKER") != "1"
+    if embedded_enabled:
+        await worker.start()
+        logger.info("FastAPI platform initialized and embedded background worker loop active.")
+    else:
+        logger.info("FastAPI platform initialized (external background worker mode).")
     yield
-    await worker.stop()
+    if embedded_enabled:
+        await worker.stop()
     logger.info("FastAPI platform shutdown complete.")
 
 

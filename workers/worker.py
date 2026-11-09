@@ -183,6 +183,7 @@ class BackgroundWorker:
 
 async def _run_worker_main() -> None:
     """CLI entrypoint for standalone background worker container (`python -m workers.worker`)."""
+    import os
     import signal
     from apps.api.dependencies import get_background_worker
     from apps.api.main import register_worker_tasks
@@ -191,8 +192,16 @@ async def _run_worker_main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    try:
+        from workers.db_persistence import get_pg_engine, is_postgres_enabled
+        if is_postgres_enabled():
+            get_pg_engine()
+    except Exception as exc:
+        logger.warning(f"Worker DB initialization warning: {exc}")
+
     register_worker_tasks()
     worker = get_background_worker()
+    worker.worker_id = os.environ.get("WORKER_ID", "chaos-intel-worker-01")
     stop_event = asyncio.Event()
 
     loop = asyncio.get_running_loop()
