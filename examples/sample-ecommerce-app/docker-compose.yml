@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - order-service
+      - payment-service
+  order-service:
+    build: ./order-service
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@orders-db:5432/orders
+      REDIS_URL: redis://redis-cache:6379/0
+    depends_on:
+      - orders-db
+      - redis-cache
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "8002:8002"
+  orders-db:
+    image: postgres:15-alpine
+  redis-cache:
+    image: redis:7-alpine
+

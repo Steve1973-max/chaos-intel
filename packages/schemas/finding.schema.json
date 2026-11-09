@@ -1,1 +1,46 @@
-{"$schema": "http://json-schema.org/draft-07/schema#", "description": "Placeholder for future schema"}
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/finding.schema.json",
+  "title": "Failure Finding",
+  "description": "Correlated failure cluster and probable root cause findings for CHAOS-INTEL Phase 4.",
+  "type": "object",
+  "properties": {
+    "cluster_id": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "time_window_start": { "type": "string", "format": "date-time" },
+    "time_window_end": { "type": "string", "format": "date-time" },
+    "primary_affected_service": { "type": "string" },
+    "affected_services": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "anomalies": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "error_logs": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "error_spans": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "test_failures": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "chaos_events": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "cluster_id",
+    "correlation_id",
+    "time_window_start",
+    "time_window_end",
+    "primary_affected_service"
+  ]
+}

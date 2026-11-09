@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/test-plan.schema.json",
+  "title": "Test Plan",
+  "description": "A deterministic, explainable, and schema-validated resilience test plan generated from Application Intelligence outputs.",
+  "type": "object",
+  "properties": {
+    "plan_id": { "type": "string", "minLength": 1 },
+    "schema_version": { "type": "string", "minLength": 1 },
+    "application_id": { "type": "string", "minLength": 1 },
+    "application_name": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "requires_review"]
+    },
+    "execution_authorized": {
+      "type": "boolean",
+      "const": false
+    },
+    "safety_gate_status": {
+      "type": "string",
+      "enum": ["pending_safety_engine"]
+    },
+    "provider_id": { "type": "string", "minLength": 1 },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "total_test_cases": { "type": "integer", "minimum": 0 },
+        "by_priority": {
+          "type": "object",
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "high": { "type": "integer", "minimum": 0 },
+            "medium": { "type": "integer", "minimum": 0 },
+            "low": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["critical", "high", "medium", "low"]
+        },
+        "by_test_type": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "deduplicated_count": { "type": "integer", "minimum": 0 },
+        "total_risks_addressed": { "type": "integer", "minimum": 0 },
+        "total_coverage_gaps": { "type": "integer", "minimum": 0 },
+        "overall_coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": [
+        "total_test_cases",
+        "by_priority",
+        "by_test_type",
+        "deduplicated_count",
+        "total_risks_addressed",
+        "total_coverage_gaps",
+        "overall_coverage_ratio"
+      ]
+    },
+    "test_cases": {
+      "type": "array",
+      "items": { "$ref": "test-case.schema.json" }
+    },
+    "coverage_report": {
+      "$ref": "coverage-report.schema.json"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string", "minLength": 1 }
+        },
+        "required": ["source", "type", "detail"]
+      }
+    },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "plan_id",
+    "schema_version",
+    "application_id",
+    "application_name",
+    "status",
+    "execution_authorized",
+    "safety_gate_status",
+    "provider_id",
+    "confidence",
+    "summary",
+    "test_cases",
+    "coverage_report",
+    "evidence"
+  ]
+}

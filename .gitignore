@@ -21,11 +21,15 @@ venv.bak/
 dist/
 build/
 *.egg-info/
+node_modules/
 
-# Tests
+# Tests and Temporary Runtime Uploads
 .pytest_cache/
 coverage.xml
 htmlcov/
+results.xml
+staging_uploads/
+*.log
 
 # MacOS
 .DS_Store

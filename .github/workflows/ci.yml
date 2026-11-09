@@ -1,0 +1,151 @@
+name: CHAOS-INTEL Platform CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-test-suite:
+    name: Backend Test Suite (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn pydantic starlette sqlalchemy redis psycopg[binary] httpx anyio pytest pytest-asyncio testcontainers python-multipart networkx alembic
+
+      - name: Run Gateway & Integration Tests
+        run: |
+          PYTHONPATH=. pytest tests/ -k "not browser_e2e" -v --tb=short
+
+      - name: Run Application Intelligence Tests
+        run: |
+          cd services/application-intelligence
+          PYTHONPATH="src:." pytest -m "not postgres" -v --tb=short
+
+      - name: Run Testing Agents Tests
+        run: |
+          cd services/testing-agents
+          PYTHONPATH="src:." pytest -v --tb=short
+
+      - name: Run Chaos Engine Tests
+        run: |
+          cd services/chaos-engine
+          PYTHONPATH="src:." pytest -v --tb=short
+
+      - name: Run Failure Intelligence Tests
+        run: |
+          cd services/failure-intelligence
+          PYTHONPATH="src:." pytest -v --tb=short
+
+  frontend-verification:
+    name: Frontend Verification (Node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'apps/web/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Run Vitest Unit Tests
+        working-directory: apps/web
+        run: npm test
+
+      - name: Build Production Frontend
+        working-directory: apps/web
+        run: npm run build
+
+  postgres-integration-gate:
+    name: PostgreSQL Integration Gate (Zero Skips Enforced)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chaos_intel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: services/application-intelligence
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Verify Docker Daemon
+        run: |
+          docker info > /dev/null 2>&1 || {
+            echo "ERROR: Docker daemon is not running on runner."
+            exit 1
+          }
+          echo "Docker daemon verified."
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Run PostgreSQL Integration Tests
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/chaos_intel
+        run: |
+          python -m pytest tests/test_persistence_integration.py -v --tb=short --junitxml=results.xml
+
+      - name: Verify Real PostgreSQL Execution (Zero Skips Permitted)
+        if: always()
+        run: |
+          python -c '
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse("results.xml")
+          root = tree.getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+          if not suites:
+              print("ERROR: No testsuite elements found in JUnit XML.")
+              sys.exit(1)
+          tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
+          failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
+          errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.attrib.get("skipped", 0)) for s in suites)
+          print(f"Gate Results -> Total: {tests}, Failures: {failures}, Errors: {errors}, Skipped: {skipped}")
+          if skipped > 0:
+              print(f"CI GATE FAILURE: {skipped} test(s) skipped! Silent skip due to missing Docker or testcontainers is prohibited.")
+              sys.exit(1)
+          if tests == 0 or failures > 0 or errors > 0:
+              print("CI GATE FAILURE: Test suite did not complete with all passing tests.")
+              sys.exit(1)
+          print("CI GATE PASSED: All PostgreSQL integration tests ran and passed against real PostgreSQL container.")
+          '
+

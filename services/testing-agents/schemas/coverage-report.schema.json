@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/coverage-report.schema.json",
+  "title": "Coverage Report",
+  "description": "Coverage analysis identifying covered and uncovered services, dependencies, APIs, and workflows.",
+  "type": "object",
+  "properties": {
+    "application_id": { "type": "string", "minLength": 1 },
+    "schema_version": { "type": "string", "minLength": 1 },
+    "total_entities": { "type": "integer", "minimum": 0 },
+    "covered_entities": { "type": "integer", "minimum": 0 },
+    "uncovered_entities": { "type": "integer", "minimum": 0 },
+    "overall_coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "service_coverage": {
+      "$ref": "#/definitions/dimension_coverage"
+    },
+    "dependency_coverage": {
+      "$ref": "#/definitions/dimension_coverage"
+    },
+    "api_coverage": {
+      "$ref": "#/definitions/dimension_coverage"
+    },
+    "workflow_coverage": {
+      "$ref": "#/definitions/dimension_coverage"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "gap_id": { "type": "string", "minLength": 1 },
+          "dimension": {
+            "type": "string",
+            "enum": ["service", "dependency", "api", "workflow"]
+          },
+          "target_id": { "type": "string", "minLength": 1 },
+          "target_name": { "type": "string", "minLength": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "suggested_test_type": {
+            "type": "string",
+            "enum": [
+              "availability",
+              "latency",
+              "dependency_resilience",
+              "api_resilience",
+              "resource_exhaustion",
+              "failover",
+              "degradation",
+              "workflow_resilience"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": { "type": "string", "minLength": 1 },
+                "type": { "type": "string", "minLength": 1 },
+                "detail": { "type": "string", "minLength": 1 }
+              },
+              "required": ["source", "type", "detail"]
+            }
+          }
+        },
+        "required": [
+          "gap_id",
+          "dimension",
+          "target_id",
+          "target_name",
+          "severity",
+          "reason",
+          "suggested_test_type",
+          "evidence"
+        ]
+      }
+    }
+  },
+  "required": [
+    "application_id",
+    "schema_version",
+    "total_entities",
+    "covered_entities",
+    "uncovered_entities",
+    "overall_coverage_ratio",
+    "service_coverage",
+    "dependency_coverage",
+    "api_coverage",
+    "workflow_coverage",
+    "gaps"
+  ],
+  "definitions": {
+    "dimension_coverage": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "enum": ["service", "dependency", "api", "workflow"]
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "uncovered": { "type": "integer", "minimum": 0 },
+        "coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "covered_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "uncovered_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": [
+        "dimension",
+        "total",
+        "covered",
+        "uncovered",
+        "coverage_ratio",
+        "covered_ids",
+        "uncovered_ids"
+      ]
+    }
+  }
+}
+

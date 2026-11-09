@@ -16,16 +16,37 @@ from src.execution.persistence.repositories import (
     SqlTransactionBoundary
 )
 from src.execution.persistence.db import init_db, get_engine, get_db_session
+from src.execution.persistence.interfaces import OptimisticConcurrencyError
+from src.execution.reliability.errors import LeaseAcquisitionError
 
-# Integration tests using Testcontainers
+# Integration tests using Testcontainers or direct connection URL
 try:
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
     TESTCONTAINERS_AVAILABLE = True
 except ImportError:
-    TESTCONTAINERS_AVAILABLE = False
+    try:
+        from testcontainers.postgres import PostgresContainer
+        TESTCONTAINERS_AVAILABLE = True
+    except ImportError:
+        TESTCONTAINERS_AVAILABLE = False
+
+def _normalize_postgres_url(db_url: str) -> str:
+    if db_url.startswith("postgresql+psycopg2://"):
+        return db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+    if db_url.startswith("postgresql://"):
+        return db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return db_url
+
 
 @pytest.fixture(scope="module")
 def postgres_engine():
+    db_url = os.environ.get("TEST_POSTGRES_URL")
+    if db_url:
+        engine = create_engine(_normalize_postgres_url(db_url))
+        Base.metadata.create_all(engine)
+        yield engine
+        return
+
     if not TESTCONTAINERS_AVAILABLE:
         pytest.skip("testcontainers not available")
     
@@ -35,10 +56,7 @@ def postgres_engine():
     except Exception as e:
         pytest.skip(f"Docker not available or failed to start container: {e}")
         
-    db_url = postgres.get_connection_url()
-    # testcontainers returns dialect+driver, sqlalchemy 2.0 prefers postgresql+psycopg
-    if db_url.startswith("postgresql+psycopg2://"):
-        db_url = db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://")
+    db_url = _normalize_postgres_url(postgres.get_connection_url())
     
     engine = create_engine(db_url)
     Base.metadata.create_all(engine)
@@ -103,7 +121,7 @@ def test_lease_acquisition_and_fencing(db_session):
     assert repo.validate_fencing_token(res_id, 2) is False
     
     # Competing worker fails to acquire
-    with pytest.raises(ValueError, match="actively held"):
+    with pytest.raises(LeaseAcquisitionError, match="actively held"):
         repo.acquire(res_id, "owner-2", ttl_seconds=60)
         
     # Owner renews
@@ -149,7 +167,7 @@ def test_stale_expected_version_rejected(db_session):
     assert s == "APPROVED"
     
     # Stale transition 1 -> 2 again fails
-    with pytest.raises(ValueError, match="Version mismatch"):
+    with pytest.raises(OptimisticConcurrencyError, match="Version mismatch"):
         run.state = "EXECUTING"
         run.version = 2
         repo.transition_state(run_id, 1, "EXECUTING", run)

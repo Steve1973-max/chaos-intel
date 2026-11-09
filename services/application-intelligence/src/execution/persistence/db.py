@@ -24,6 +24,8 @@ def init_db(url: str = None):
     if not url:
         raise ValueError("DATABASE_URL environment variable is missing and no url provided")
     engine = create_engine(url)
+    from .models import Base
+    Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @contextmanager

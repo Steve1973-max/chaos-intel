@@ -37,6 +37,21 @@ jobs:
     name: PostgreSQL Integration Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chaos_intel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: services/application-intelligence
@@ -65,10 +80,13 @@ jobs:
           python -m pip install -e ".[test]"
 
       - name: Run PostgreSQL Integration Tests
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/chaos_intel
         run: |
           python -m pytest tests/test_persistence_integration.py -v --tb=short --junitxml=results.xml
 
       - name: Verify PostgreSQL Tests Actually Executed (Zero Skips Permitted)
+        if: always()
         run: |
           python -c '
           import xml.etree.ElementTree as ET, sys

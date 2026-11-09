@@ -198,15 +198,16 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepository):
             owner_id=owner,
             status="in_progress"
         )
-        self.session.add(new_record)
         try:
             # We use savepoint (nested transaction) to catch integrity error
             with self.session.begin_nested():
+                self.session.add(new_record)
                 self.session.flush()
             return ("acquired", None)
         except IntegrityError:
             # Concurrent insertion occurred
-            self.session.expunge(new_record)
+            if new_record in self.session:
+                self.session.expunge(new_record)
             record = self.session.execute(stmt).scalar_one_or_none()
             if not record:
                 raise RuntimeError("Failed to read concurrently inserted record")
@@ -297,13 +298,14 @@ class SqlAlchemyLeaseRepository(LeaseRepository):
                     acquired_at=now,
                     expires_at=datetime.fromtimestamp(now.timestamp() + ttl_seconds, tz=timezone.utc)
                 )
-                self.session.add(lease)
                 try:
                     with self.session.begin_nested():
+                        self.session.add(lease)
                         self.session.flush()
                     break
                 except IntegrityError:
-                    self.session.expunge(lease)
+                    if lease in self.session:
+                        self.session.expunge(lease)
                     retries += 1
                     continue
         else:

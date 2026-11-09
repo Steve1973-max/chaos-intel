@@ -1,20 +1,108 @@
 version: '3.8'
 
 services:
-  # Placeholder for future services
-  # Person 3: Postgres, Redis, FastAPI
-  # Person 4: React frontend
-  # Person 1/2: Workers and Agents
   postgres:
     image: postgres:15-alpine
+    container_name: chaos-intel-postgres
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=chaos_intel
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-chaos_intel}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chaos_intel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chaos-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: chaos-intel-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chaos-net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: chaos-intel-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/chaos_intel
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-chaos-intel-supersecret-production-key}
+      UPLOAD_DIR: /app/staging_uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - staging_uploads:/app/staging_uploads
+    networks:
+      - chaos-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    container_name: chaos-intel-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/chaos_intel
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/staging_uploads
+    volumes:
+      - staging_uploads:/app/staging_uploads
+    networks:
+      - chaos-net
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: chaos-intel-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    networks:
+      - chaos-net
 
 volumes:
   postgres_data:
+  redis_data:
+  staging_uploads:
+
+networks:
+  chaos-net:
+    driver: bridge

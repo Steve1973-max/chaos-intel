@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chaos-intel.local/schemas/test-run.schema.json",
+  "title": "Test Execution Result",
+  "description": "Normalized, schema-validated result of executing an approved test case in the Testing Agents Execution Engine.",
+  "type": "object",
+  "properties": {
+    "execution_id": { "type": "string", "minLength": 1 },
+    "test_case_id": { "type": "string", "minLength": 1 },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "application_id": { "type": "string", "minLength": 1 },
+    "adapter_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "skipped", "timed_out", "cancelled", "unknown"]
+    },
+    "started_at": { "type": "string", "minLength": 1 },
+    "ended_at": { "type": "string", "minLength": 1 },
+    "duration_ms": { "type": "number", "minimum": 0 },
+    "correlation_id": { "type": "string", "minLength": 1 },
+    "cleanup_completed": { "type": "boolean" },
+    "step_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_number": { "type": "integer", "minimum": 1 },
+          "step_name": { "type": "string", "minLength": 1 },
+          "stage": {
+            "type": "string",
+            "enum": ["precondition", "step", "postcondition"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "skipped", "timed_out", "cancelled", "unknown"]
+          },
+          "started_at": { "type": "string", "minLength": 1 },
+          "ended_at": { "type": "string", "minLength": 1 },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "latency_ms": { "type": ["number", "null"], "minimum": 0 },
+          "details": { "type": "object" },
+          "error": {
+            "type": ["object", "null"],
+            "properties": {
+              "error_type": { "type": "string" },
+              "message": { "type": "string" },
+              "failed_step_number": { "type": ["integer", "null"] },
+              "failed_stage": { "type": ["string", "null"] },
+              "failed_target": { "type": ["string", "null"] },
+              "outcome_uncertain": { "type": "boolean" }
+            },
+            "required": ["error_type", "message"]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": [
+          "step_number",
+          "step_name",
+          "stage",
+          "status",
+          "started_at",
+          "ended_at",
+          "duration_ms",
+          "details",
+          "evidence_refs"
+        ]
+      }
+    },
+    "error_details": {
+      "type": ["object", "null"],
+      "properties": {
+        "error_type": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "failed_step_number": { "type": ["integer", "null"] },
+        "failed_stage": { "type": ["string", "null"] },
+        "failed_target": { "type": ["string", "null"] },
+        "outcome_uncertain": { "type": "boolean" }
+      },
+      "required": ["error_type", "message"]
+    },
+    "evidence_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "evidence_id": { "type": "string", "minLength": 1 },
+          "type": {
+            "type": "string",
+            "enum": [
+              "http_trace",
+              "screenshot",
+              "console_log",
+              "network_log",
+              "step_trace",
+              "assertion_log"
+            ]
+          },
+          "uri": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "redacted_metadata": { "type": "object" }
+        },
+        "required": ["evidence_id", "type", "uri", "summary", "redacted_metadata"]
+      }
+    },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "execution_id",
+    "test_case_id",
+    "plan_id",
+    "application_id",
+    "adapter_id",
+    "status",
+    "started_at",
+    "ended_at",
+    "duration_ms",
+    "correlation_id",
+    "cleanup_completed",
+    "step_results",
+    "error_details",
+    "evidence_references"
+  ]
+}
+
